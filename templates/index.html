@@ -137,95 +137,116 @@
       <div id="promptList" class="list grid-view">
       {% for p in prompts %}
         {% set is_locked = (auth_mode == 'per') and (p['id'] in locked_ids) %}
-        <article class="card{% if p['color'] %} color-ring{% endif %}" style="animation-delay: {{ loop.index * 0.1 }}s;{% if p['color'] %} --accent: {{ p['color'] }};{% endif %}">
-            <div class="card-header">
-              <div class="card-title-area">
-                <a href="{{ url_for('unlock_prompt', prompt_id=p['id']) if is_locked else url_for('prompt_detail', prompt_id=p['id']) }}" class="card-title">
-                  <i class="fas fa-file-alt"></i>
-                  <span class="title-text">{{ p['name'] }}</span>
-                </a>
-                <div class="card-actions">
-                  <form method="post" action="{{ url_for('toggle_pin', prompt_id=p['id']) }}" class="inline-form">
-                    <button class="icon-btn" title="{{ t('置顶/取消置顶') }}" aria-label="{{ t('置顶') }}" type="submit">
-                      {% if p['pinned'] %}
-                        <i class="fas fa-star" style="color: var(--star);"></i>
-                      {% else %}
-                        <i class="far fa-star"></i>
-                      {% endif %}
-                    </button>
-                  </form>
-                </div>
+        <article class="card legacy-card{% if p['color'] %} color-ring{% endif %}" style="animation-delay: {{ loop.index * 0.1 }}s;{% if p['color'] %} --accent: {{ p['color'] }};{% endif %}">
+          <div class="card-header">
+            <div class="card-title-area">
+              <a href="{{ url_for('unlock_prompt', prompt_id=p['id']) if is_locked else url_for('prompt_detail', prompt_id=p['id']) }}" class="card-title">
+                <i class="fas fa-file-alt"></i>
+                <span class="title-text">{{ p['name'] }}</span>
+              </a>
+              <div class="card-actions">
+                <form method="post" action="{{ url_for('toggle_pin', prompt_id=p['id']) }}" class="inline-form">
+                  <button class="icon-btn" title="{{ t('置顶/取消置顶') }}" aria-label="{{ t('置顶') }}" type="submit">
+                    {% if p['pinned'] %}
+                      <i class="fas fa-star" style="color: var(--star);"></i>
+                    {% else %}
+                      <i class="far fa-star"></i>
+                    {% endif %}
+                  </button>
+                </form>
               </div>
-              
-              <div class="card-meta">
-                {% if is_locked %}
-                  <div class="meta-item">
-                    <i class="fas fa-link"></i>
-                    <span class="meta-label">{{ t('来源：') }}</span>
-                    <span class="meta-value">{{ t('需要密码') }}</span>
-                  </div>
-                {% else %}
-                  <div class="meta-item">
-                    <i class="fas fa-link"></i>
-                    <span class="meta-label">{{ t('来源：') }}</span>
-                    <span class="meta-value">{{ p['source'] or '—' }}</span>
-                  </div>
-                  <div class="meta-item">
-                    <i class="fas fa-clock"></i>
-                    <span class="meta-label">{{ t('修改：') }}</span>
-                    <span class="meta-value">{{ (p['updated_at'] or '')[:19].replace('T',' ') }}</span>
-                  </div>
+            </div>
+            
+            <div class="card-meta">
+              {% if is_locked %}
+                <div class="meta-item">
+                  <i class="fas fa-link"></i>
+                  <span class="meta-label">{{ t('来源：') }}</span>
+                  <span class="meta-value">{{ t('需要密码') }}</span>
+                </div>
+              {% else %}
+                <div class="meta-item">
+                  <i class="fas fa-link"></i>
+                  <span class="meta-label">{{ t('来源：') }}</span>
+                  <span class="meta-value">{{ p['source'] or '—' }}</span>
+                </div>
+                <div class="meta-item">
+                  <i class="fas fa-clock"></i>
+                  <span class="meta-label">{{ t('修改：') }}</span>
+                  <span class="meta-value">{{ (p['updated_at'] or '')[:19].replace('T',' ') }}</span>
+                </div>
+                <div class="meta-pair">
                   <div class="meta-item">
                     <i class="fas fa-code-branch"></i>
                     <span class="meta-label">{{ t('版本：') }}</span>
                     <span class="meta-value">{{ p['current_version'] or '—' }}</span>
                   </div>
-                {% endif %}
-              </div>
-              {% if is_locked %}
-              <div class="meta-item" style="margin-top: var(--spacing-sm); color: var(--muted);">
-                <i class="fas fa-lock"></i>
-                <span class="meta-label">{{ t('该提示词受密码保护') }}</span>
-              </div>
+                  <div class="meta-item">
+                    <i class="fas fa-sticky-note"></i>
+                    <span class="meta-label">{{ t('备注：') }}</span>
+                    <span class="meta-value">{{ p['notes'] or '—' }}</span>
+                  </div>
+                </div>
               {% endif %}
             </div>
-
-            {% set tags = (p['tags'] and (p['tags']|loads)) or [] %}
-            {% if not is_locked and tags %}
-              <div class="card-tags">
-                {% for t in tags %}
-                  <span class="tag">
-                    <i class="fas fa-tag"></i>
-                    {{ t }}
-                  </span>
-                {% endfor %}
-              </div>
+            {% if is_locked %}
+            <div class="meta-item" style="margin-top: var(--spacing-sm); color: var(--muted);">
+              <i class="fas fa-lock"></i>
+              <span class="meta-label">{{ t('该提示词受密码保护') }}</span>
+            </div>
             {% endif %}
+          </div>
 
-            {% if p['notes'] and not is_locked %}
-              <div class="card-notes">
-                <i class="fas fa-sticky-note"></i>
-                <span class="notes-text">{{ p['notes'] }}</span>
-              </div>
-            {% endif %}
+          {% set tags = (p['tags'] and (p['tags']|loads)) or [] %}
+          {% if not is_locked and tags %}
+            <div class="card-tags">
+              {% for t in tags %}
+                <span class="tag">
+                  <i class="fas fa-tag"></i>
+                  {{ t }}
+                </span>
+              {% endfor %}
+            </div>
+          {% endif %}
 
-            {% if p['current_content'] and not is_locked %}
-              <div class="card-preview">
-                <div class="preview-header">
-                  <div class="preview-title">
-                    <i class="fas fa-eye"></i>
-                    <span>{{ t('内容预览') }}</span>
+          {% set has_image = (p['image_data'] and not is_locked) %}
+          {% if has_image %}
+            <div class="card-image-wrap media-image-wrap overlay-image-wrap">
+              <img src="{{ p['image_data'] }}" alt="{{ p['name'] }}" class="card-image" loading="lazy" />
+              {% if p['current_content'] %}
+                <div class="image-preview-overlay">
+                  <div class="preview-header">
+                    <div class="preview-title">
+                      <i class="fas fa-eye"></i>
+                      <span>{{ t('内容预览') }}</span>
+                    </div>
+                    <button class="copy-preview-btn" onclick="copyPreviewContent(this)" data-content="{{ p['current_content']|e }}" title="{{ t('复制预览内容') }}">
+                      <i class="fas fa-copy"></i>
+                    </button>
                   </div>
-                  <button class="copy-preview-btn" onclick="copyPreviewContent(this)" data-content="{{ p['current_content']|e }}" title="{{ t('复制预览内容') }}">
-                    <i class="fas fa-copy"></i>
-                  </button>
+                  <div class="preview-content">
+                    {{ p['current_content'][:180] }}{% if p['current_content']|length > 180 %}...{% endif %}
+                  </div>
                 </div>
-                <div class="preview-content">
-                  {{ p['current_content'][:150] }}{% if p['current_content']|length > 150 %}...{% endif %}
+              {% endif %}
+            </div>
+          {% elif p['current_content'] and not is_locked %}
+            <div class="card-preview">
+              <div class="preview-header">
+                <div class="preview-title">
+                  <i class="fas fa-eye"></i>
+                  <span>{{ t('内容预览') }}</span>
                 </div>
+                <button class="copy-preview-btn" onclick="copyPreviewContent(this)" data-content="{{ p['current_content']|e }}" title="{{ t('复制预览内容') }}">
+                  <i class="fas fa-copy"></i>
+                </button>
               </div>
-            {% endif %}
-            </article>
+              <div class="preview-content">
+                {{ p['current_content'][:150] }}{% if p['current_content']|length > 150 %}...{% endif %}
+              </div>
+            </div>
+          {% endif %}
+        </article>
           {% endfor %}
           </div>
     {% endif %}
@@ -668,19 +689,216 @@
       margin: 0 0 var(--spacing-xl) 0;
     }
     
-    .card-header {
-      margin-bottom: var(--spacing-md);
-      padding-left: var(--spacing-sm);
+    .card {
+      padding: var(--spacing-xl);
     }
-    
+
+    .card.image-card {
+      padding: var(--spacing-xl);
+      overflow: visible;
+    }
+
+    .card-hero {
+      position: relative;
+      min-height: 200px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      isolation: isolate;
+      overflow: hidden;
+    }
+
+    .card-hero.no-image {
+      background-color: #eeeeee;
+      background-image:
+        linear-gradient(45deg, #e4e4e4 25%, transparent 25%),
+        linear-gradient(-45deg, #e4e4e4 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #e4e4e4 75%),
+        linear-gradient(-45deg, transparent 75%, #e4e4e4 75%);
+      background-size: 30px 30px;
+      background-position: 0 0, 0 15px, 15px -15px, -15px 0;
+    }
+
+    .card-hero.has-image {
+      background: color-mix(in srgb, var(--bg) 65%, var(--card));
+    }
+
+    .card-hero-bg {
+      position: absolute;
+      inset: -10px;
+      background-size: cover;
+      background-position: center;
+      filter: blur(14px) saturate(1.05);
+      transform: scale(1.08);
+      opacity: 0.75;
+      transition: transform 0.35s ease, opacity 0.35s ease;
+    }
+
+    .card:hover .card-hero-bg {
+      transform: scale(1.11);
+      opacity: 0.82;
+    }
+
+    .card-hero-image {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      object-position: center;
+      z-index: 1;
+      transition: transform 0.35s ease, opacity 0.35s ease;
+    }
+
+    .card:hover .card-hero-image {
+      transform: scale(1.025);
+    }
+
+    .card-bottom {
+      padding: var(--spacing-md) 0 0 0;
+      background: transparent;
+    }
+
     .card-title-area {
       display: flex;
       align-items: center;
       justify-content: space-between;
       margin-bottom: var(--spacing-sm);
+      gap: var(--spacing-sm);
+    }
+
+    .card-title {
+      display: block;
+      font-size: var(--font-size-lg);
+      font-weight: 600;
+      color: var(--primary);
+      text-decoration: none;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .card-title:hover {
+      color: var(--primary);
+    }
+
+    .title-text {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: var(--spacing-xs);
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .card-actions .icon-btn,
+    .copy-preview-btn {
+      min-height: 36px;
+      min-width: 36px;
+      padding: var(--spacing-sm);
+      border-radius: 10px;
+      transition: all 0.2s ease;
+    }
+
+    .card-actions .icon-btn:hover,
+    .copy-preview-btn:hover {
+      background: color-mix(in srgb, var(--primary) 10%, transparent);
+      transform: scale(1.05);
+    }
+
+    .card-meta {
+      display: flex;
+      gap: var(--spacing-md);
+      flex-wrap: wrap;
+      font-size: var(--font-size-sm);
+      color: var(--muted);
+    }
+
+    .meta-item {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--spacing-xs);
+      min-width: 0;
+    }
+
+    .meta-pair {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--spacing-md);
+      min-width: 0;
+      max-width: 100%;
+      flex-wrap: nowrap;
+    }
+
+    .meta-pair .meta-item {
+      min-width: 0;
+    }
+
+    .meta-item i {
+      opacity: 0.75;
+      flex-shrink: 0;
+    }
+
+    .meta-value {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .card-tags {
+      display: flex;
+      gap: var(--spacing-sm);
+      margin-top: var(--spacing-md);
+      flex-wrap: wrap;
+    }
+
+    .tag {
+      background: transparent;
+      border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+      padding: var(--spacing-xs) var(--spacing-md);
+      border-radius: 20px;
+      font-size: var(--font-size-sm);
+      color: var(--muted);
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+    }
+
+    .tag:hover {
+      color: var(--primary);
+      border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+      background: color-mix(in srgb, var(--primary) 7%, transparent);
     }
     
-    .card-title {
+    .copy-preview-btn {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: var(--font-size-xs);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .copy-preview-btn.copied {
+      color: var(--success);
+    }
+    
+    .inline-form {
+      display: inline;
+    }
+
+    .legacy-card .card-header {
+      margin-bottom: var(--spacing-md);
+      padding-left: var(--spacing-sm);
+    }
+
+    .legacy-card .card-title {
       display: flex;
       align-items: center;
       gap: var(--spacing-sm);
@@ -691,106 +909,132 @@
       flex: 1;
       margin-right: var(--spacing-md);
     }
-    
-    .card-title:hover {
+
+    .legacy-card .card-title:hover {
       text-decoration: underline;
+      color: var(--primary);
     }
-    
-    .card-title i {
-      opacity: 0.8;
-    }
-    
-    .title-text {
+
+    .legacy-card .title-text {
+      display: inline;
       flex: 1;
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
     }
-    
-    .card-actions {
-      display: flex;
-      gap: var(--spacing-sm);
-      align-items: center;
-    }
-    
-    .card-actions .icon-btn {
+
+    .legacy-card .card-actions .icon-btn {
       min-height: 40px;
       min-width: 40px;
-      padding: var(--spacing-sm);
       border-radius: var(--radius-md);
-      transition: all 0.2s ease;
     }
-    
-    .card-actions .icon-btn:hover {
-      background: color-mix(in srgb, var(--primary) 10%, transparent);
-      transform: scale(1.05);
-    }
-    
-    .card-meta {
-      display: flex;
+
+    .legacy-card .card-meta {
       gap: var(--spacing-lg);
-      flex-wrap: wrap;
       font-size: var(--font-size-xs);
-      color: var(--muted);
     }
-    
-    .meta-item {
-      display: flex;
-      align-items: center;
-      gap: var(--spacing-xs);
-    }
-    
-    .meta-item i {
-      opacity: 0.7;
-    }
-    
-    .meta-label {
+
+    .legacy-card .meta-label {
       font-weight: 500;
     }
-    
-    .card-tags {
-      display: flex;
-      gap: var(--spacing-sm);
+
+    .legacy-card .card-tags {
       margin-top: var(--spacing-lg);
-      flex-wrap: wrap;
     }
-    
-    .tag {
-      background: transparent; 
-      border: 1px dashed var(--border); 
-      padding: var(--spacing-sm) var(--spacing-md); 
-      border-radius: 20px; 
-      font-size: var(--font-size-xs); 
-      color: var(--muted);
-      transition: all 0.2s ease;
-      display: inline-flex;
-      align-items: center;
+
+    .legacy-card .tag {
+      border-style: dashed;
+      font-size: var(--font-size-xs);
+      padding: var(--spacing-sm) var(--spacing-md);
       gap: var(--spacing-xs);
-      min-height: 28px;
     }
-    
-    .card-notes {
-      margin-top: var(--spacing-lg);
-      font-size: var(--font-size-sm);
-      color: var(--fg);
-      line-height: 1.6;
-      display: flex;
-      align-items: flex-start;
-      gap: var(--spacing-sm);
-      padding: var(--spacing-sm) 0;
-    }
-    
-    .card-notes i {
-      opacity: 0.7;
-      margin-top: 2px;
-    }
-    
-    .card-preview {
+
+    .legacy-card .card-preview {
       margin-top: var(--spacing-lg);
       padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-lg) var(--spacing-lg);
       background: color-mix(in srgb, var(--bg) 30%, var(--card));
       border-radius: var(--radius-lg);
       border: 1px solid var(--border);
     }
-    
-    .preview-header {
+
+    .legacy-card .card-image-wrap {
+      margin-top: var(--spacing-lg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      background: color-mix(in srgb, var(--bg) 30%, var(--card));
+    }
+
+    .legacy-card .card-image {
+      display: block;
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+      transition: transform 0.3s ease;
+    }
+
+    .legacy-card:hover .card-image {
+      transform: scale(1.015);
+    }
+
+    .legacy-card .media-image-wrap {
+      margin-top: var(--spacing-lg);
+      background: color-mix(in srgb, var(--bg) 22%, var(--card));
+    }
+
+    .legacy-card .media-image-wrap .card-image {
+      height: 220px;
+    }
+
+    .legacy-card .overlay-image-wrap {
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+    }
+
+    .legacy-card .overlay-image-wrap::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.7) 100%);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .legacy-card .image-preview-overlay {
+      position: absolute;
+      left: var(--spacing-md);
+      right: var(--spacing-md);
+      bottom: var(--spacing-md);
+      z-index: 2;
+      color: #f7f8fb;
+    }
+
+    .legacy-card .overlay-image-wrap .preview-header {
+      color: rgba(247, 248, 251, 0.88);
+      margin-bottom: var(--spacing-xs);
+    }
+
+    .legacy-card .overlay-image-wrap .preview-content {
+      color: #f3f4f7;
+      font-size: var(--font-size-sm);
+      line-height: 1.5;
+      text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
+    }
+
+    .legacy-card .overlay-image-wrap .copy-preview-btn {
+      color: #f7f8fb;
+      background: rgba(18, 20, 24, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(2px);
+    }
+
+    .legacy-card .overlay-image-wrap .copy-preview-btn:hover {
+      background: rgba(18, 20, 24, 0.55);
+      color: #ffffff;
+    }
+
+    .legacy-card .preview-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -802,47 +1046,18 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
-    
-    .preview-title {
+
+    .legacy-card .preview-title {
       display: flex;
       align-items: center;
       gap: var(--spacing-xs);
     }
-    
-    .copy-preview-btn {
-      background: transparent;
-      border: none;
-      color: var(--muted);
-      cursor: pointer;
-      padding: var(--spacing-sm);
-      border-radius: var(--radius-md);
-      font-size: var(--font-size-xs);
-      transition: all 0.2s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 32px;
-      min-width: 32px;
-    }
-    
-    .copy-preview-btn:hover {
-      color: var(--primary);
-      background: color-mix(in srgb, var(--primary) 10%, transparent);
-    }
-    
-    .copy-preview-btn.copied {
-      color: var(--success);
-    }
-    
-    .preview-content {
+
+    .legacy-card .preview-content {
       font-size: var(--font-size-xs);
       color: var(--fg);
       line-height: 1.5;
       font-family: 'Consolas', 'Monaco', 'SF Mono', monospace;
-    }
-    
-    .inline-form {
-      display: inline;
     }
     
     @media (max-width: 768px) {
@@ -911,48 +1126,56 @@
         justify-content: space-around;
       }
       
-      .card-title-area {
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--spacing-sm);
+      .card-hero {
+        min-height: 165px;
       }
-      
+
+      .card-bottom {
+        padding: var(--spacing-sm) 0 0 0;
+      }
+
       .card-title {
-        margin-right: var(--spacing-sm);
         font-size: var(--font-size-lg);
       }
-      
-      /* 保持元信息水平显示，但优化间距 */
+
       .card-meta {
         gap: var(--spacing-md);
         flex-wrap: wrap;
-        font-size: var(--font-size-xs);
+        font-size: var(--font-size-sm);
       }
-      
-      .meta-item {
-        min-width: fit-content;
-      }
-      
-      .card-preview {
-        margin-top: var(--spacing-lg);
-        padding: var(--spacing-xs) var(--spacing-md) var(--spacing-md) var(--spacing-md);
-      }
-      
+
       .card-tags {
         margin-top: var(--spacing-md);
         gap: var(--spacing-xs);
       }
-      
+
       .tag {
-        font-size: 11px;
+        font-size: var(--font-size-xs);
         padding: var(--spacing-xs) var(--spacing-sm);
         min-height: 24px;
       }
-      
-      .card-notes {
-        margin-top: var(--spacing-md);
+
+      .legacy-card .card-title {
+        margin-right: var(--spacing-sm);
+        font-size: var(--font-size-lg);
+      }
+
+      .legacy-card .card-meta {
+        gap: var(--spacing-md);
         font-size: var(--font-size-xs);
+      }
+
+      .legacy-card .card-preview {
+        margin-top: var(--spacing-lg);
+        padding: var(--spacing-xs) var(--spacing-md) var(--spacing-md) var(--spacing-md);
+      }
+
+      .legacy-card .card-image {
+        height: 165px;
+      }
+
+      .legacy-card .media-image-wrap .card-image {
+        height: 185px;
       }
     }
   </style>

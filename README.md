@@ -2,7 +2,11 @@
 
 语言: 简体中文 | [English](README.en.md)
 
-一个功能完整的本地提示词管理系统，支持版本控制、搜索、标签管理、导入导出功能。采用Python + Flask + SQLite 构建，无需外部依赖，开箱即用。
+<p align="center">
+  <img src="logo.png" alt="Prompt Manager Logo" width="160" />
+</p>
+
+一个功能完整的本地提示词管理系统，支持版本控制、搜索、标签管理、图片管理与导入导出。采用 Python + Flask + SQLite 构建，无需外部依赖，开箱即用。
 
 A fully functional local prompt management system that supports version control, search, tag management, and import/export features. Built with Python + Flask + SQLite, it requires no external dependencies and works out of the box.
 
@@ -10,6 +14,9 @@ A fully functional local prompt management system that supports version control,
 
 ### 📝 提示词管理
 - **创建编辑**：支持名称、来源、标签、备注等完整元信息
+- **单图支持**：每个提示词可绑定 1 张图片（`image_data`，Base64 存储）
+- **图片约束**：支持 `jpg/jpeg/png/webp`，最大 5MB
+- **兼容迁移**：启动时自动迁移旧数据库结构，不破坏现有数据
 - **内容预览**：首页显示内容摘要，支持一键复制完整内容
 - **置顶功能**：重要提示词可置顶显示
 - **智能搜索**：支持名称、来源、备注、标签、内容的全文搜索
@@ -39,10 +46,15 @@ A fully functional local prompt management system that supports version control,
 - **键盘快捷键**：支持 Ctrl+S 保存、Ctrl+P 预览等快捷操作
 - **桌面端视图切换**：首页支持列表/网格一键切换，并记住偏好
 - **提示词颜色标注（新）**：在“高级设置”为提示词设置颜色（支持 #RGB/#RRGGBB），首页卡片将显示细微的同色外圈；提供可视化取色器、小圆点预览与“一键清除”按钮；留空则不设置
- - **界面语言（新）**：在“设置”中可切换界面语言（中文/英文），默认中文
+- **界面语言（新）**：在“设置”中可切换界面语言（中文/英文），默认中文
+- **首页卡片展示（含图）**：保持原有卡片视觉体系；有图提示词在内容区下方显示图片，内容预览叠加在图片上并带渐变遮罩；无图提示词保持原有样式
+- **锁定提示词图片隐藏**：在“指定提示词密码”模式下，锁定卡片不显示图片
 
 ### 📤 数据管理
-- **导入导出**：JSON 格式完整数据备份和恢复
+- **导入导出**：支持 JSON/CSV 两种格式的完整数据备份和恢复
+- **图片兼容**：JSON/CSV 均支持 `image_data` 字段（Base64），无需额外打包图片文件
+- **CSV 字段**：`id,name,source,notes,color,tags,image_data,pinned,require_password,created_at,updated_at,current_version_id,versions`
+- **CSV 复杂字段**：`tags`、`versions` 以 JSON 字符串存储
 - **数据安全**：本地 SQLite 存储，无云端依赖
 - **设置管理**：可配置版本清理阈值与访问密码等系统参数
   - 支持切换界面语言（中文/英文）
@@ -186,7 +198,7 @@ prompt/
 
 ### 表结构
 - **prompts**: 提示词基本信息
-  - `id`, `name`, `source`, `notes`, `color`, `tags`, `pinned`, `created_at`, `updated_at`, `current_version_id`, `require_password`
+  - `id`, `name`, `source`, `notes`, `color`, `tags`, `image_data`, `pinned`, `created_at`, `updated_at`, `current_version_id`, `require_password`
 - **versions**: 版本历史记录
   - `id`, `prompt_id`, `version`, `content`, `created_at`, `parent_version_id`
 - **settings**: 系统设置
@@ -208,6 +220,7 @@ prompt/
       "notes": "处理客户咨询的标准回复模板",
       "color": "#409eff",
       "tags": ["场景/客服", "业务/售后"],
+      "image_data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
       "pinned": true,
       "require_password": false,
       "created_at": "2024-01-01T00:00:00",
@@ -252,10 +265,11 @@ prompt/
 ### 高级功能
 
 - **标签系统**：使用 `/` 创建层级标签，如 `部门/技术/开发`
-- **批量操作**：通过导入导出功能进行批量数据管理
+- **批量操作**：通过 JSON/CSV 导入导出进行批量数据管理（`/export?format=json`、`/export?format=csv`）
 - **版本对比**：支持词级和行级两种对比模式
 - **主题切换**：点击右上角主题按钮切换深色/浅色模式
- - **颜色导入导出**：导出 JSON 包含 `color` 字段；导入时自动识别与校验（非法值忽略），留空按未设置处理
+- **颜色导入导出**：导出 JSON 包含 `color` 字段；导入时自动识别与校验（非法值忽略），留空按未设置处理
+- **图片管理**：编辑页使用 `multipart/form-data`，支持上传、覆盖、移除图片；前端即时校验格式/大小，后端进行二次校验
  
 ### 访问密码设置
 1. 打开“设置 → 访问密码”。
@@ -328,23 +342,3 @@ app.run(host='0.0.0.0', port=3501, debug=True)
   - 容器/Compose 默认：`/app/data/data.sqlite3`
   - 本地运行示例：`DB_PATH=./data.sqlite3 python app.py`
   - 未设置时使用默认值；应用会在首次访问时自动创建目录与数据库文件
-
-## 📝 更新日志
-
-### 最新功能
-- ✅ 新增提示词颜色标注：在“高级设置”可设置颜色（#RGB/#RRGGBB），首页卡片显示细微彩色外圈；内置可视化取色器、预览圆点与清除按钮；导入/导出完整支持 `color` 字段
-- ✅ 首页卡片式网格布局 + 桌面端视图开关
-- ✅ 完善的黑夜模式适配
-- ✅ 首页内容预览一键复制
-- ✅ 动态页面标题显示
-- ✅ 简化的用户界面
-- ✅ 增强的颜色主题系统
- - ✅ 新增访问密码（关闭/指定提示词/全局）与卡片加锁显示
-
-### 变更与修复
-- 统一使用相对路径作为 `next`
-  - 在全局密码拦截中将 `next` 从 `request.url` 改为相对路径（如 `/settings?...`），避免出现 `http://127.0.0.1` 这类内部地址。
-  - 在登录与解锁处理中对 `next` 做安全归一化，只允许站内相对路径，防止外部跳转导致失败或安全风险。
-- 信任反向代理的头
-  - 加入 `ProxyFix`，尊重 `X-Forwarded-Proto/Host` 等头，确保 `request.host`/`request.url` 能反映真实外网域名与协议。
-- 修复设置页未授权修改密码的逻辑漏洞，避免任意用户可进入设置修改密码。

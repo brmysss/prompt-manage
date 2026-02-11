@@ -192,6 +192,13 @@ body {
 .brand a::before { 
   display: none; 
 }
+.brand-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
+  border-radius: var(--radius-sm);
+}
 .nav { 
   display: flex; 
   gap: var(--spacing-lg); 
@@ -791,6 +798,10 @@ textarea {
     font-size: var(--font-size-lg);
     padding: var(--spacing-xs) var(--spacing-sm);
   }
+  .brand-logo {
+    width: 24px;
+    height: 24px;
+  }
   .nav { 
     gap: var(--spacing-md); 
   }
@@ -853,6 +864,10 @@ textarea {
     font-size: var(--font-size-base);
     padding: var(--spacing-xs);
     gap: var(--spacing-xs);
+  }
+  .brand-logo {
+    width: 22px;
+    height: 22px;
   }
   .nav {
     gap: var(--spacing-sm);

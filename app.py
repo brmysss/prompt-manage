@@ -1,12 +1,14 @@
 import json
 import os
 import sqlite3
+import base64
+import csv
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.exceptions import BadRequest
 from werkzeug.utils import secure_filename
-from io import BytesIO
+from io import BytesIO, StringIO
 import re
 
 
@@ -32,6 +34,7 @@ def init_db():
             notes TEXT,
             color TEXT,
             tags TEXT,
+            image_data TEXT,
             pinned INTEGER DEFAULT 0,
             created_at TEXT,
             updated_at TEXT,
@@ -187,6 +190,10 @@ def migrate_schema():
         cols = [r['name'] for r in cur.execute('PRAGMA table_info(prompts)').fetchall()]
         if 'color' not in cols:
             cur.execute("ALTER TABLE prompts ADD COLUMN color TEXT")
+        # ensure prompts.image_data exists
+        cols = [r['name'] for r in cur.execute('PRAGMA table_info(prompts)').fetchall()]
+        if 'image_data' not in cols:
+            cur.execute("ALTER TABLE prompts ADD COLUMN image_data TEXT")
         # ensure auth settings keys exist
         cur.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('auth_mode', 'off')")
         cur.execute("INSERT OR IGNORE INTO settings(key, value) VALUES('auth_password_hash', '')")
@@ -251,10 +258,17 @@ TRANSLATIONS = {
         '数据导入 / 导出': 'Import / Export',
         '导出数据': 'Export data',
         '将所有提示词和版本历史导出为 JSON 格式文件': 'Export all prompts and version history as a JSON file',
+        '将所有提示词和版本历史导出为 JSON 或 CSV 格式文件': 'Export all prompts and version history as JSON or CSV',
         '导出全部数据': 'Export all data',
+        '导出 JSON': 'Export JSON',
+        '导出 CSV': 'Export CSV',
         '导入数据': 'Import data',
         '导入将覆盖所有现有数据，请谨慎操作': 'Import will overwrite all existing data. Proceed with caution.',
         '选择 JSON 文件': 'Choose JSON file',
+        '选择 JSON/CSV 文件': 'Choose JSON/CSV file',
+        '已选择文件：': 'Selected file: ',
+        '未选择文件': 'No file selected',
+        '文件大小：': 'File size: ',
         '保存设置 / 执行导入': 'Save settings / Run import',
 
         # 语言设置
@@ -282,6 +296,9 @@ TRANSLATIONS = {
         '已导入并覆盖所有数据': 'Imported and overwrote all data',
         '导入失败：上传表单解析错误': 'Import failed: invalid upload form data',
         '导入失败：JSON 格式无效': 'Import failed: invalid JSON',
+        '导入失败：仅支持 JSON 或 CSV 文件': 'Import failed: only JSON or CSV is supported',
+        '导入失败：CSV 文件编码无效，请使用 UTF-8': 'Import failed: invalid CSV encoding, please use UTF-8',
+        '导入失败：CSV 格式无效': 'Import failed: invalid CSV format',
         '导入失败，请重试': 'Import failed, please try again',
         '暂无版本': 'No versions yet',
         '所选版本不存在': 'Selected version does not exist',
@@ -322,9 +339,18 @@ TRANSLATIONS = {
         '需要密码': 'Password required',
         '修改：': 'Updated: ',
         '版本：': 'Version: ',
+        '备注：': 'Notes: ',
         '该提示词受密码保护': 'This prompt is password-protected',
         '内容预览': 'Preview',
         '复制预览内容': 'Copy preview',
+        '封面图片': 'Cover image',
+        '上传图片（仅 1 张）': 'Upload image (1 only)',
+        '支持 jpg/jpeg/png/webp，最大 5MB。': 'Supports jpg/jpeg/png/webp, max 5MB.',
+        '当前图片': 'Current image',
+        '移除当前图片': 'Remove current image',
+        '图片上传失败：仅支持 jpg/jpeg/png/webp 格式': 'Image upload failed: only jpg/jpeg/png/webp are supported',
+        '图片上传失败：文件大小不能超过 5MB': 'Image upload failed: file size must be <= 5MB',
+        '图片上传失败：图片不能为空': 'Image upload failed: image file is empty',
 
         # 详情/编辑 prompt_detail
         '提示词编辑': 'Edit Prompt',
@@ -482,6 +508,142 @@ def sanitize_color(val):
     return None
 
 
+ALLOWED_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'webp'}
+ALLOWED_IMAGE_MIME = {'image/jpeg', 'image/jpg', 'image/png', 'image/webp'}
+MAX_IMAGE_SIZE = 5 * 1024 * 1024
+
+
+def parse_image_upload(req):
+    """Parse one optional image upload and return (image_data, remove_image, error_text)."""
+    remove_image = req.form.get('remove_image') == '1'
+    f = req.files.get('image_file')
+    if not f or not f.filename:
+        return None, remove_image, None
+
+    filename = secure_filename(f.filename)
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        return None, remove_image, '图片上传失败：仅支持 jpg/jpeg/png/webp 格式'
+
+    mime = (f.mimetype or '').lower()
+    if mime not in ALLOWED_IMAGE_MIME:
+        return None, remove_image, '图片上传失败：仅支持 jpg/jpeg/png/webp 格式'
+    if mime == 'image/jpg':
+        mime = 'image/jpeg'
+
+    raw = f.read()
+    if not raw:
+        return None, remove_image, '图片上传失败：图片不能为空'
+    if len(raw) > MAX_IMAGE_SIZE:
+        return None, remove_image, '图片上传失败：文件大小不能超过 5MB'
+
+    encoded = base64.b64encode(raw).decode('ascii')
+    return f"data:{mime};base64,{encoded}", remove_image, None
+
+
+def parse_bool_value(val):
+    s = ('' if val is None else str(val)).strip().lower()
+    return s in ('1', 'true', 'yes', 'y', 'on')
+
+
+def parse_int_or_none(val):
+    s = ('' if val is None else str(val)).strip()
+    if not s:
+        return None
+    if re.fullmatch(r'-?\d+', s):
+        return int(s)
+    return None
+
+
+def parse_json_text(val, default):
+    s = ('' if val is None else str(val)).strip()
+    if not s:
+        return default
+    return json.loads(s)
+
+
+def load_import_payload(upload_file):
+    filename = (upload_file.filename or '').lower()
+    if filename.endswith('.json'):
+        return json.load(upload_file.stream)
+    if filename.endswith('.csv'):
+        try:
+            raw_text = upload_file.stream.read().decode('utf-8-sig')
+        except UnicodeDecodeError as e:
+            raise ValueError('导入失败：CSV 文件编码无效，请使用 UTF-8') from e
+        try:
+            reader = csv.DictReader(StringIO(raw_text))
+            prompts = []
+            for row in reader:
+                if not row:
+                    continue
+                if not any((v or '').strip() for v in row.values()):
+                    continue
+                tags_raw = row.get('tags')
+                try:
+                    tags = parse_json_text(tags_raw, [])
+                except json.JSONDecodeError:
+                    tags = parse_tags(tags_raw)
+                if not isinstance(tags, list):
+                    tags = parse_tags(tags_raw)
+                versions = parse_json_text(row.get('versions'), [])
+                if not isinstance(versions, list):
+                    versions = []
+                prompts.append({
+                    'id': parse_int_or_none(row.get('id')),
+                    'name': row.get('name'),
+                    'source': row.get('source'),
+                    'notes': row.get('notes'),
+                    'color': row.get('color'),
+                    'tags': tags,
+                    'image_data': row.get('image_data'),
+                    'pinned': parse_bool_value(row.get('pinned')),
+                    'require_password': parse_bool_value(row.get('require_password')),
+                    'created_at': row.get('created_at'),
+                    'updated_at': row.get('updated_at'),
+                    'current_version_id': parse_int_or_none(row.get('current_version_id')),
+                    'versions': versions,
+                })
+            return {'prompts': prompts}
+        except json.JSONDecodeError as e:
+            raise ValueError('导入失败：CSV 格式无效') from e
+        except csv.Error as e:
+            raise ValueError('导入失败：CSV 格式无效') from e
+    raise ValueError('导入失败：仅支持 JSON 或 CSV 文件')
+
+
+def collect_export_payload(conn):
+    prompts = conn.execute("SELECT * FROM prompts ORDER BY id ASC").fetchall()
+    result = []
+    for p in prompts:
+        versions = conn.execute("SELECT * FROM versions WHERE prompt_id=? ORDER BY created_at ASC", (p['id'],)).fetchall()
+        result.append({
+            'id': p['id'],
+            'name': p['name'],
+            'source': p['source'],
+            'notes': p['notes'],
+            'color': p['color'],
+            'tags': json.loads(p['tags']) if p['tags'] else [],
+            'image_data': p['image_data'] if 'image_data' in p.keys() else None,
+            'pinned': bool(p['pinned']),
+            'require_password': bool(p['require_password']) if 'require_password' in p.keys() else False,
+            'created_at': p['created_at'],
+            'updated_at': p['updated_at'],
+            'current_version_id': p['current_version_id'],
+            'versions': [
+                {
+                    'id': v['id'],
+                    'prompt_id': v['prompt_id'],
+                    'version': v['version'],
+                    'content': v['content'],
+                    'created_at': v['created_at'],
+                    'parent_version_id': v['parent_version_id'],
+                } for v in versions
+            ]
+        })
+    return {'prompts': result}
+
+
 @app.before_request
 def _before():
     ensure_db()
@@ -502,6 +664,21 @@ def _before():
             nxt = request.full_path if request.query_string else request.path
             nxt = nxt.rstrip('?')  # 某些情况下 full_path 末尾会带一个多余的 ?
             return redirect(url_for('login', next=nxt))
+
+
+@app.route('/logo.png')
+def logo_png():
+    """Serve logo from project root for header/favicon use."""
+    logo_path = os.path.join(app.root_path, 'logo.png')
+    if not os.path.exists(logo_path):
+        return ('', 404)
+    return send_file(logo_path, mimetype='image/png', max_age=86400)
+
+
+@app.route('/favicon.ico')
+def favicon():
+    """Use logo.png as favicon to avoid duplicate assets."""
+    return logo_png()
 
 
 @app.route('/')
@@ -631,13 +808,17 @@ def new_prompt():
         content = request.form.get('content', '')
         bump_kind = request.form.get('bump_kind', 'patch')
         require_password = 1 if request.form.get('require_password') == '1' else 0
+        image_data, _, image_error = parse_image_upload(request)
+        if image_error:
+            flash(image_error, 'error')
+            return redirect(url_for('new_prompt'))
 
         conn = get_db()
         cur = conn.cursor()
         ts = now_ts()
         cur.execute(
-            "INSERT INTO prompts(name, source, notes, color, tags, pinned, created_at, updated_at, require_password) VALUES(?,?,?,?,?,0,?,?,?)",
-            (name, source, notes, color, json.dumps(tags, ensure_ascii=False), ts, ts, require_password)
+            "INSERT INTO prompts(name, source, notes, color, tags, image_data, pinned, created_at, updated_at, require_password) VALUES(?,?,?,?,?,?,0,?,?,?)",
+            (name, source, notes, color, json.dumps(tags, ensure_ascii=False), image_data, ts, ts, require_password)
         )
         pid = cur.lastrowid
         version = bump_version(None, bump_kind)
@@ -675,9 +856,23 @@ def prompt_detail(prompt_id):
         do_save_version = request.form.get('do_save_version') == '1'
         require_password = 1 if request.form.get('require_password') == '1' else 0
         ts = now_ts()
+        new_image_data, remove_image, image_error = parse_image_upload(request)
+        if image_error:
+            conn.close()
+            flash(image_error, 'error')
+            return redirect(url_for('prompt_detail', prompt_id=prompt_id))
 
-        conn.execute("UPDATE prompts SET name=?, source=?, notes=?, color=?, tags=?, updated_at=?, require_password=? WHERE id=?",
-                     (name, source, notes, color, json.dumps(tags, ensure_ascii=False), ts, require_password, prompt_id))
+        old_prompt = conn.execute("SELECT image_data FROM prompts WHERE id=?", (prompt_id,)).fetchone()
+        old_image_data = old_prompt['image_data'] if old_prompt else None
+        if new_image_data:
+            final_image_data = new_image_data
+        elif remove_image:
+            final_image_data = None
+        else:
+            final_image_data = old_image_data
+
+        conn.execute("UPDATE prompts SET name=?, source=?, notes=?, color=?, tags=?, image_data=?, updated_at=?, require_password=? WHERE id=?",
+                     (name, source, notes, color, json.dumps(tags, ensure_ascii=False), final_image_data, ts, require_password, prompt_id))
 
         if do_save_version:
             # 取当前版本号
@@ -857,7 +1052,7 @@ def settings():
             if 'import_file' in files and files['import_file']:
                 try:
                     f = files['import_file']
-                    data = json.load(f.stream)
+                    data = load_import_payload(f)
                     # 覆盖所有数据
                     cur = conn.cursor()
                     cur.execute("DELETE FROM versions")
@@ -867,9 +1062,13 @@ def settings():
                         prompts = data['prompts']
                     else:
                         prompts = data
+                    if not isinstance(prompts, list):
+                        raise ValueError('导入失败：JSON 格式无效')
                     for p in prompts:
+                        if not isinstance(p, dict):
+                            continue
                         cur.execute(
-                            "INSERT INTO prompts(id, name, source, notes, color, tags, pinned, created_at, updated_at, current_version_id, require_password) VALUES(?,?,?,?,?,?,?,?,?,NULL,?)",
+                            "INSERT INTO prompts(id, name, source, notes, color, tags, image_data, pinned, created_at, updated_at, current_version_id, require_password) VALUES(?,?,?,?,?,?,?,?,?,?,NULL,?)",
                             (
                                 p.get('id'),
                                 p.get('name'),
@@ -877,6 +1076,7 @@ def settings():
                                 p.get('notes'),
                                 sanitize_color(p.get('color')),
                                 json.dumps(p.get('tags') or [], ensure_ascii=False),
+                                p.get('image_data'),
                                 1 if p.get('pinned') else 0,
                                 p.get('created_at') or now_ts(),
                                 p.get('updated_at') or now_ts(),
@@ -885,6 +1085,8 @@ def settings():
                         )
                         pid = cur.lastrowid if p.get('id') is None else p.get('id')
                         for v in (p.get('versions') or []):
+                            if not isinstance(v, dict):
+                                continue
                             cur.execute(
                                 "INSERT INTO versions(id, prompt_id, version, content, created_at, parent_version_id) VALUES(?,?,?,?,?,?)",
                                 (
@@ -901,6 +1103,8 @@ def settings():
                     flash('已导入并覆盖所有数据', 'success')
                 except json.JSONDecodeError:
                     flash('导入失败：JSON 格式无效', 'error')
+                except ValueError as e:
+                    flash(str(e), 'error')
                 except Exception:
                     flash('导入失败，请重试', 'error')
         conn.close()
@@ -917,38 +1121,52 @@ def settings():
 @app.route('/export')
 def export_all():
     conn = get_db()
-    prompts = conn.execute("SELECT * FROM prompts ORDER BY id ASC").fetchall()
-    result = []
-    for p in prompts:
-        versions = conn.execute("SELECT * FROM versions WHERE prompt_id=? ORDER BY created_at ASC", (p['id'],)).fetchall()
-        result.append({
-            'id': p['id'],
-            'name': p['name'],
-            'source': p['source'],
-            'notes': p['notes'],
-            'color': p['color'],
-            'tags': json.loads(p['tags']) if p['tags'] else [],
-            'pinned': bool(p['pinned']),
-            'require_password': bool(p['require_password']) if 'require_password' in p.keys() else False,
-            'created_at': p['created_at'],
-            'updated_at': p['updated_at'],
-            'current_version_id': p['current_version_id'],
-            'versions': [
-                {
-                    'id': v['id'],
-                    'prompt_id': v['prompt_id'],
-                    'version': v['version'],
-                    'content': v['content'],
-                    'created_at': v['created_at'],
-                    'parent_version_id': v['parent_version_id'],
-                } for v in versions
-            ]
-        })
+    data = collect_export_payload(conn)
     conn.close()
-    payload = json.dumps({'prompts': result}, ensure_ascii=False, indent=2)
+    export_format = (request.args.get('format') or 'json').lower()
+    if export_format == 'csv':
+        fieldnames = [
+            'id', 'name', 'source', 'notes', 'color', 'tags', 'image_data', 'pinned',
+            'require_password', 'created_at', 'updated_at', 'current_version_id', 'versions'
+        ]
+        sio = StringIO()
+        writer = csv.DictWriter(sio, fieldnames=fieldnames)
+        writer.writeheader()
+        for p in data.get('prompts', []):
+            writer.writerow({
+                'id': p.get('id'),
+                'name': p.get('name'),
+                'source': p.get('source'),
+                'notes': p.get('notes'),
+                'color': p.get('color'),
+                'tags': json.dumps(p.get('tags') or [], ensure_ascii=False),
+                'image_data': p.get('image_data'),
+                'pinned': '1' if p.get('pinned') else '0',
+                'require_password': '1' if p.get('require_password') else '0',
+                'created_at': p.get('created_at'),
+                'updated_at': p.get('updated_at'),
+                'current_version_id': p.get('current_version_id'),
+                'versions': json.dumps(p.get('versions') or [], ensure_ascii=False),
+            })
+        payload = sio.getvalue()
+        bio = BytesIO(payload.encode('utf-8'))
+        bio.seek(0)
+        return send_file(
+            bio,
+            mimetype='text/csv; charset=utf-8',
+            as_attachment=True,
+            download_name='prompts_export.csv'
+        )
+
+    payload = json.dumps(data, ensure_ascii=False, indent=2)
     bio = BytesIO(payload.encode('utf-8'))
     bio.seek(0)
-    return send_file(bio, mimetype='application/json; charset=utf-8', as_attachment=True, download_name='prompts_export.json')
+    return send_file(
+        bio,
+        mimetype='application/json; charset=utf-8',
+        as_attachment=True,
+        download_name='prompts_export.json'
+    )
 
 
 # Diff 视图
