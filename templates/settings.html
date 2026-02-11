@@ -133,11 +133,15 @@
                 <h4>{{ t('导出数据') }}</h4>
               </div>
               <p class="action-description">
-                {{ t('将所有提示词和版本历史导出为 JSON 格式文件') }}
+                {{ t('将所有提示词和版本历史导出为 JSON 或 CSV 格式文件') }}
               </p>
-              <a href="{{ url_for('export_all') }}" class="btn primary export-btn">
+              <a href="{{ url_for('export_all', format='json') }}" class="btn primary export-btn">
                 <i class="fas fa-file-export"></i>
-                {{ t('导出全部数据') }}
+                {{ t('导出 JSON') }}
+              </a>
+              <a href="{{ url_for('export_all', format='csv') }}" class="btn ghost export-btn export-btn-secondary">
+                <i class="fas fa-file-csv"></i>
+                {{ t('导出 CSV') }}
               </a>
             </div>
             
@@ -152,9 +156,12 @@
               </p>
               <label class="upload-btn">
                 <i class="fas fa-file-import"></i>
-                {{ t('选择 JSON 文件') }}
-                <input type="file" name="import_file" accept="application/json" />
+                {{ t('选择 JSON/CSV 文件') }}
+                <input id="importFileInput" type="file" name="import_file" accept=".json,.csv,application/json,text/csv" />
               </label>
+              <div id="importFileStatus" class="import-file-status" aria-live="polite">
+                <span class="empty">{{ t('未选择文件') }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -366,6 +373,10 @@
       width: 100%;
       justify-content: center;
     }
+
+    .export-btn-secondary {
+      margin-top: var(--spacing-sm);
+    }
     
     .upload-btn {
       display: inline-flex;
@@ -391,6 +402,37 @@
     
     .upload-btn input[type="file"] {
       display: none;
+    }
+
+    .import-file-status {
+      margin-top: var(--spacing-sm);
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-md);
+      padding: var(--spacing-sm) var(--spacing-md);
+      font-size: var(--font-size-sm);
+      color: var(--muted);
+      background: color-mix(in srgb, var(--card) 60%, transparent);
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+    }
+
+    .import-file-status .empty {
+      opacity: 0.85;
+    }
+
+    .import-file-status.valid {
+      border-style: solid;
+      border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+      color: var(--fg);
+      background: color-mix(in srgb, var(--primary) 8%, transparent);
+    }
+
+    .import-file-status.invalid {
+      border-style: solid;
+      border-color: color-mix(in srgb, var(--del) 50%, var(--border));
+      color: var(--del);
+      background: color-mix(in srgb, var(--del) 8%, transparent);
     }
     
     /* Auth section styles */
@@ -489,4 +531,59 @@
       }
     }
   </style>
+
+  <script>
+    (function () {
+      const input = document.getElementById('importFileInput');
+      const status = document.getElementById('importFileStatus');
+      if (!input || !status) return;
+
+      const I18N = {
+        selected: {{ t('已选择文件：')|tojson }},
+        none: {{ t('未选择文件')|tojson }},
+        size: {{ t('文件大小：')|tojson }},
+        invalid: {{ t('导入失败：仅支持 JSON 或 CSV 文件')|tojson }}
+      };
+
+      const fmtSize = (bytes) => {
+        if (!Number.isFinite(bytes) || bytes < 0) return '--';
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+      };
+
+      const escapeHtml = (txt) => String(txt || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+      const setEmpty = () => {
+        status.classList.remove('valid', 'invalid');
+        status.innerHTML = `<span class="empty">${escapeHtml(I18N.none)}</span>`;
+      };
+
+      input.addEventListener('change', () => {
+        const file = input.files && input.files[0];
+        if (!file) {
+          setEmpty();
+          return;
+        }
+
+        const ok = /\.(json|csv)$/i.test(file.name || '');
+        status.classList.toggle('valid', ok);
+        status.classList.toggle('invalid', !ok);
+
+        if (!ok) {
+          status.textContent = I18N.invalid;
+          return;
+        }
+
+        status.innerHTML = `${escapeHtml(I18N.selected)}<strong>${escapeHtml(file.name)}</strong><span style="margin-left:8px;">${escapeHtml(I18N.size)}${escapeHtml(fmtSize(file.size))}</span>`;
+      });
+
+      setEmpty();
+    })();
+  </script>
 {% endblock %}

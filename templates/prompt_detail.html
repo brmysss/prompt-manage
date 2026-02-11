@@ -24,7 +24,7 @@
       {% endif %}
     </div>
 
-    <form method="post" class="prompt-form">
+    <form method="post" class="prompt-form" enctype="multipart/form-data">
       <div class="form-sections">
         <!-- Basic Information Section -->
         <div class="form-section primary-section">
@@ -130,7 +130,32 @@
                 </label>
                 <input type="text" id="notes" name="notes" value="{{ (prompt and prompt['notes']) or '' }}" 
                        placeholder="{{ t('补充说明或使用注意事项') }}" />
-                  </div>
+              </div>
+
+              <div class="form-group">
+                <label for="image_file">
+                  <i class="fas fa-image"></i>
+                  {{ t('封面图片') }}
+                </label>
+                <div class="image-upload-wrap">
+                  <input type="file" id="image_file" name="image_file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" />
+                  <div class="input-help">{{ t('支持 jpg/jpeg/png/webp，最大 5MB。') }}</div>
+                  {% if prompt and prompt['image_data'] %}
+                    <div class="image-preview-box">
+                      <span class="image-preview-label">{{ t('当前图片') }}</span>
+                      <img src="{{ prompt['image_data'] }}" alt="{{ t('当前图片') }}" class="image-preview" />
+                    </div>
+                    <label class="checkbox-label remove-image-check">
+                      <input type="checkbox" name="remove_image" value="1" />
+                      <span class="checkbox-custom"></span>
+                      <span class="checkbox-text">
+                        <i class="fas fa-trash"></i>
+                        {{ t('移除当前图片') }}
+                      </span>
+                    </label>
+                  {% endif %}
+                </div>
+              </div>
             </div>
 
             <div class="form-group" style="margin-top: var(--spacing-md);">
@@ -413,6 +438,66 @@
       border-color: var(--primary);
       box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
       transform: translateY(-1px);
+    }
+
+    input[type="file"] {
+      width: 100%;
+      padding: var(--spacing-sm);
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-lg);
+      background: color-mix(in srgb, var(--card) 60%, transparent);
+      color: var(--muted);
+      transition: all 0.3s ease;
+    }
+
+    input[type="file"]:hover {
+      border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+      background: color-mix(in srgb, var(--primary) 4%, var(--card));
+    }
+
+    input[type="file"]:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
+    }
+
+    .image-upload-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-sm);
+    }
+
+    .image-preview-box {
+      margin-top: var(--spacing-xs);
+      padding: var(--spacing-sm);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: color-mix(in srgb, var(--card) 50%, transparent);
+    }
+
+    .image-preview-label {
+      display: inline-block;
+      margin-bottom: var(--spacing-xs);
+      font-size: var(--font-size-sm);
+      color: var(--muted);
+    }
+
+    .image-preview {
+      display: block;
+      width: 100%;
+      max-height: 220px;
+      object-fit: cover;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+
+    .image-preview:hover {
+      transform: scale(1.01);
+    }
+
+    .remove-image-check {
+      margin-top: var(--spacing-xs);
     }
     
     textarea {
@@ -809,7 +894,9 @@
       AUTOSIZE_OFF: {{ t('自动调整大小')|tojson }},
       NO_COPY_SOURCE: {{ t('没有内容可复制')|tojson }},
       COPY_FAIL: {{ t('复制失败，请手动选择文本复制')|tojson }},
-      CLEAR_CONFIRM: {{ t('确定要清空内容吗？此操作不可撤销。')|tojson }}
+      CLEAR_CONFIRM: {{ t('确定要清空内容吗？此操作不可撤销。')|tojson }},
+      IMAGE_TYPE_ERROR: {{ t('图片上传失败：仅支持 jpg/jpeg/png/webp 格式')|tojson }},
+      IMAGE_SIZE_ERROR: {{ t('图片上传失败：文件大小不能超过 5MB')|tojson }}
     };
     // Auto-resize toggle state (default: off)
     let autoResizeEnabled = false;
@@ -841,12 +928,29 @@
     function initializeForm() {
       const form = document.querySelector('.prompt-form');
       const submitBtn = form.querySelector('button[type="submit"]');
+      const imageInput = document.getElementById('image_file');
       
       // Store original button text
       submitBtn.dataset.originalText = submitBtn.textContent.trim();
       
       // Form submission handler
       form.addEventListener('submit', (e) => {
+        if (imageInput && imageInput.files && imageInput.files[0]) {
+          const file = imageInput.files[0];
+          const allow = ['image/jpeg', 'image/png', 'image/webp'];
+          if (!allow.includes(file.type)) {
+            e.preventDefault();
+            showFieldError(imageInput, I18N.IMAGE_TYPE_ERROR);
+            return;
+          }
+          if (file.size > 5 * 1024 * 1024) {
+            e.preventDefault();
+            showFieldError(imageInput, I18N.IMAGE_SIZE_ERROR);
+            return;
+          }
+          clearFieldError(imageInput);
+        }
+
         if (!validateForm()) {
           e.preventDefault();
           return;
@@ -1228,6 +1332,23 @@
         updateCharCounter(document.getElementById('content'));
         document.getElementById('content').focus();
       }
+    });
+
+    document.getElementById('image_file')?.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const allow = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allow.includes(file.type)) {
+        e.target.value = '';
+        showFieldError(e.target, I18N.IMAGE_TYPE_ERROR);
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        e.target.value = '';
+        showFieldError(e.target, I18N.IMAGE_SIZE_ERROR);
+        return;
+      }
+      clearFieldError(e.target);
     });
   </script>
 {% endblock %}

@@ -8,6 +8,7 @@
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0b0b0f" media="(prefers-color-scheme: dark)">
   <title>{% block title %}{{ t('Prompt 管理器') }}{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('logo_png') }}" />
   <script>
     // Apply saved manual theme ASAP to avoid flash; otherwise follow system
     (function() {
@@ -37,7 +38,7 @@
   <header class="topbar">
     <div class="brand">
       <a href="{{ url_for('index') }}">
-        <i class="fas fa-folder-open"></i>
+        <img src="{{ url_for('logo_png') }}" alt="logo" class="brand-logo" />
         {{ t('提示词管理') }}
       </a>
     </div>
