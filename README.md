@@ -87,7 +87,7 @@ docker run -d \
 1. **克隆项目**
    ```bash
    git clone https://github.com/zhuchenyu2008/prompt-manage
-   cd prompt
+   cd prompt-manage
    ```
 
 2. **启动应用（本地构建）**
@@ -136,7 +136,7 @@ docker run -d -p 3501:3501 -v prompt-data:/app/data prompt-manager
 1. **克隆或下载项目**
    ```bash
    git clone https://github.com/zhuchenyu2008/prompt-manage
-   cd prompt
+   cd prompt-manage
    ```
 
 2. **安装依赖**
